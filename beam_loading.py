@@ -163,8 +163,7 @@ class main_GUI(QMainWindow):
     
     def __init__(self,parent = None):
         QMainWindow.__init__(self,parent)
-        self.start_row = 4
-        self.beam_func = ""
+        self.supports = ()
         #setting title
         self.title = "Beam loading"
         #setting menu
@@ -182,13 +181,10 @@ class main_GUI(QMainWindow):
         self.widget = QDialog()
         self.layout = QGridLayout()
         self.layout.addWidget(self.plot,1,1,20,4)
+        for col in range(1,4):
+            self.layout.setColumnStretch(col,4)
         self.layout.addWidget(self.button_clear,21,1,1,2,Qt.AlignCenter)
         self.layout.addWidget(self.button_update,21,3,1,2,Qt.AlignCenter)
-        self.widget.setLayout(self.layout)
-        self.setCentralWidget(self.widget)
-        
-    def add_layout(self,lay,row,col,row_span,col_span):
-        self.layout.addLayout(lay,row,col,row_span,col_span)
         self.widget.setLayout(self.layout)
         self.setCentralWidget(self.widget)
         
@@ -222,15 +218,24 @@ class main_GUI(QMainWindow):
             self.menuAdd = self.menuBar().addMenu("&Add")
             #beam menu
             self.subBeam = QMenu("&Beam",self)
+            #rectangle
             self.actionRect = QAction("Rectangular",self)
             self.actionRect.triggered.connect(self.create_rect_beam)
+            #rectangle(hollow)
             self.actionRect_hall = QAction("Rectangular (hallow)",self)
             self.actionRect_hall.triggered.connect(self.create_rect_hall_beam)
+            #circular
             self.actionCirc = QAction("Circular",self)
             self.actionCirc.triggered.connect(self.create_circular_beam)
+            #circular(hollow)
             self.actionCirc_hall = QAction("Circular (hallow)",self)
+            self.actionCirc_hall.triggered.connect(self.create_circular_hall_beam)
+            #I beam
             self.actionI = QAction("I-beam",self)
+            self.actionI.triggered.connect(self.create_i_beam)
+            #triangular beam
             self.actionTria = QAction("Triangular",self)
+            self.actionTria.triggered.connect(self.create_tria_beam)
             self.subBeam.addActions([self.actionRect,self.actionRect_hall, \
                                       self.actionCirc,self.actionCirc_hall, \
                                       self.actionI,self.actionTria])
@@ -274,45 +279,64 @@ class main_GUI(QMainWindow):
 # =============================================================================
 # creating beam widgets        
 # =============================================================================
-    def create_sub(self,row_start,col_start,row_end,col_end,*args):
+    def create_sub(self,obj,row_start,col_start,row_end,col_end,*args):
+        #removes old widgets
         if self.layout.itemAtPosition(row_start,col_start) != None:
             for row in range(row_start,row_end + 1):
                 for col in range(col_start,col_end + 1):
-                    
-        if self.layout.itemAtPosition(row_start,col_start) == None:
-            i = 1
-            for row in range(row_start,row_end + 1):
-                for col in range(col_start, col_end + 1):
-                    if row == row_start:
-                        if col == col_start:
-                            exec("self.label"+str(row)+"_"+str(col)+"=QLabel('')")
-                            exec("self.layout.addWidget(self.label"+str(row)+"_"+str(col)+","+str(row)+","+str(col)+",1,10,Qt.AlignCenter)")
-                    else:
-                        if col % 2 == 1:
-                            exec("self.label"+str(row)+"_"+str(col)+"=QLabel('')")
-                            exec("self.layout.addWidget(self.label"+str(row)+"_"+str(col)+","+str(row)+","+str(col)+",1,1,Qt.AlignRight)")
-                        else:
-                            exec("self.box"+str(row)+"_"+str(col)+"=QLineEdit('')")
-                            exec("self.layout.addWidget(self.box"+str(row)+"_"+str(col)+","+str(row)+","+str(col)+",1,1)")
-        
+                    if self.layout.itemAtPosition(row,col) != None:
+                        self.layout.itemAtPosition(row,col).widget().deleteLater()
+        #adds new widgets
         i = 1
         for row in range(row_start,row_end + 1):
             for col in range(col_start, col_end + 1):
                 if i < len(args):
                     if row == row_start:
                         if col == col_start:
-                            exec("self.label"+str(row)+"_"+str(col)+".setText(args[0])")
+                            exec("self.label"+str(row)+"_"+str(col)+\
+                                 "=QLabel('')")
+                            exec("self.layout.addWidget(self.label"+str(row)+\
+                                                        "_"+str(col)+","+\
+                                                        str(row)+","+str(col)+\
+                                                        ",1,10,Qt.AlignCenter)")
                     else:
                         if col % 2 == 1:
-                            exec("self.label"+str(row)+"_"+str(col)+".setText(args[i]+':')")
+                            exec("self.label"+str(row)+"_"+str(col)+"=QLabel('')")
+                            exec("self.layout.addWidget(self.label"+str(row)+\
+                                                        "_"+str(col)+","+\
+                                                        str(row)+","+str(col)+\
+                                                        ",1,1,Qt.AlignRight)")
                         else:
-                            exec("self.beam_"+args[i]+"= lambda self: self.box"+str(row)+"_"+str(col)+".text()")
+                            exec("self.box"+str(row)+"_"+str(col)+\
+                                 "=QLineEdit('')")
+                            exec("self.layout.addWidget(self.box"+str(row)+\
+                                                        "_"+str(col)+","+\
+                                                        str(row)+","+str(col)+\
+                                                        ",1,1)")
+                            i = i + 1
+        #gives the widgets values and calling functions
+        i = 1
+        for row in range(row_start,row_end + 1):
+            for col in range(col_start, col_end + 1):
+                if i < len(args):
+                    if row == row_start:
+                        if col == col_start:
+                            exec("self.label"+str(row)+"_"+str(col)+\
+                                 ".setText(args[0])")
+                    else:
+                        if col % 2 == 1:
+                            exec("self.label"+str(row)+"_"+str(col)+\
+                                 ".setText(args[i]+':')")
+                        else:
+                            exec("self."+obj+"_"+args[i]+\
+                                 "= lambda self: self.box"+str(row)+"_"+\
+                                 str(col)+".text()")
                             i = i + 1
               
     def create_rect_beam(self):
         self.beam_type = "rect_beam"
-        self.create_sub(1,5,3,14,"Rectangular Beam","Length","Height","Width",\
-                        "Youngs_Modulus","Specific_Gravity")
+        self.create_sub("beam",1,5,3,14,"Rectangular Beam","Length","Height",\
+                        "Width","Youngs_Modulus","Specific_Gravity")
         
     def update_rect_beam(self):
         self.beam = rectangular_beam(float(self.beam_Length(self)),\
@@ -323,10 +347,9 @@ class main_GUI(QMainWindow):
         
     def create_rect_hall_beam(self):
         self.beam_type = "rect_hall_beam"
-        self.create_sub(1,5,3,14,"Rectangular (Hollow) Beam","Length",\
-                              "Height","Width","Interior_Width",\
-                              "Interior_Height","Youngs_Modulus",\
-                              "Specific_Gravity")    
+        self.create_sub("beam",1,5,3,14,"Rectangular (Hollow) Beam","Length",\
+                        "Height","Width","Interior_Width","Interior_Height",\
+                        "Youngs_Modulus","Specific_Gravity")    
         
     def update_rect_hall_beam(self):
         self.beam = rectangular_hallow_beam(float(self.beam_Length(self)),\
@@ -339,16 +362,66 @@ class main_GUI(QMainWindow):
         
     def create_circular_beam(self):
         self.beam_type = "circular_beam"
-        sublayout = self.create_sublayout(1,5,"Circular Beam","Length",\
-                                          "Diameter","Youngs_Modulus",\
-                                          "Specific_Gravity")
-        self.add_layout(sublayout,1,5,1,4)       
+        self.create_sub("beam",1,5,3,14,"Circular Beam","Length","Diameter",\
+                        "Youngs_Modulus","Specific_Gravity")    
         
     def update_circular_beam(self):
-        self.beam = circular_beam(float(self.beam_Length.text()),\
-                                     float(self.beam_Diamter.text()),\
-                                     float(self.beam_Youngs_Modulus.text()),\
-                                     float(self.beam_Specific_Gravity.text()))
+        self.beam = circular_beam(float(self.beam_Length(self)),\
+                                     float(self.beam_Diameter(self)),\
+                                     float(self.beam_Youngs_Modulus(self)),\
+                                     float(self.beam_Specific_Gravity(self)))
+        
+    def create_circular_hall_beam(self):
+        self.beam_type = "circular_hall_beam"
+        self.create_sub("beam",1,5,3,14,"Circular (Hallow) Beam","Length",\
+                        "Diameter","Interior_Diameter","Youngs_Modulus",\
+                        "Specific_Gravity")
+        
+    def update_circular_hall_beam(self):
+        self.beam = circular_hallow_beam(float(self.beam_Length(self)),\
+                                     float(self.beam_Diameter(self)),\
+                                     float(self.beam_Interior_Diameter(self)),\
+                                     float(self.beam_Youngs_Modulus(self)),\
+                                     float(self.beam_Specific_Gravity(self)))
+        
+    def create_i_beam(self):
+        self.beam_type = "i_beam"
+        self.create_sub("beam",1,5,3,14,"I Beam","Length","Height","Width",\
+                        "Top_Bottom_Tickness","Center_Thickness",\
+                        "Youngs_Modulus","Specific_Gravity")
+        
+    def update_i_beam(self):
+        self.beam = i_beam(float(self.beam_Length(self)),\
+                           float(self.beam_Height(self)),\
+                           float(self.beam_Width(self)),\
+                           float(self.beam_Top_Bottom_Thickness(self)),\
+                           float(self.beam_Center_Thickness(self)),\
+                           float(self.beam_Youngs_Modulus(self)),\
+                           float(self.beam_Specific_Gravity(self)))
+        
+    def create_tria_beam(self):
+        self.beam_type = "tria_beam"
+        self.create_sub("beam",1,5,3,14,"Rectangular Beam","Length","Height",\
+                        "Width","Youngs_Modulus","Specific_Gravity")
+        
+    def update_tria_beam(self):
+        self.beam = triangular_beam(float(self.beam_Length(self)),\
+                                     float(self.beam_Height(self)),\
+                                     float(self.beam_Width(self)),\
+                                     float(self.beam_Youngs_Modulus(self)),\
+                                     float(self.beam_Specific_Gravity(self)))
+        
+# =============================================================================
+# creating support widgets        
+# =============================================================================
+        
+    def create_fixed_support(self):
+        num = len(self.supports) +1
+        row = 3 + 2*num
+        self.create_sub("support"+"_"+num,row,5,row+1,14,"Fixed Support","Location_x")
+        
+        
+    
         
 class MatplotlibCanvas(FigureCanvas):
     
