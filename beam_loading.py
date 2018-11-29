@@ -3,6 +3,7 @@
 ###############################################################################
 import numpy as np
 import sympy as sp
+from sympy.physics.continuum_mechanics.beam import Beam as beam_mech
 
 ###############################################################################
 #universal units
@@ -118,32 +119,32 @@ class pin_support(support):
 ############################# Loads ###########################################
 class load_class:
     
-    def __init__(self,start,finish,load_0,load_1):
-        self.x0, self.x1, self.l0, self.l1 = start, finish, load_0, load_1
+    def __init__(self,start,finish,load_0,load_1,order):
+        self.x0, self.x1, self.l0, self.l1,self.order = start, finish, load_0, load_1, order
         
 class point_load(load_class):
     
     def __init__(self,x,load):
-        load_class.__init__(self,x,x,load,load)
+        load_class.__init__(self,x,x,load,load,-1)
         self.func = load
         
 class distributed_load(load_class):
     
     def __init__(self,x0,x1,load_per_unit):
-        load_class.__init__(self,x0,x1, load_per_unit, load_per_unit)
+        load_class.__init__(self,x0,x1, load_per_unit, load_per_unit,0)
         self.func = load_per_unit
         
 class linear_load(load_class):
     
     def __init__(self,x0,x1,load0,load1):
-        load_class.__init__(self,x0,x1,load0,load1)
+        load_class.__init__(self,x0,x1,load0,load1,1)
         x = sp.Symbol("x")
         self.func = load0 + (load1-load0)/(x1-x0) * (x - x0)
         
 class parabolic_load(load_class):
     
     def __init__(self,x0,x1,load0,load1):
-        load_class.__init__(self,x0,x1,load0,load1)
+        load_class.__init__(self,x0,x1,load0,load1,2)
         x = sp.Symbol("x")
         if load1 > load0:
             self.func = load0 + ((x-x0)**2)*(load1-load0)/((x1-x0)**2)
@@ -164,6 +165,7 @@ class main_GUI(QMainWindow):
     def __init__(self,parent = None):
         QMainWindow.__init__(self,parent)
         #init beam
+        self.beam_type = None
         self.beam = None
         #init supports
         self.supports = [None,None,None]
@@ -328,15 +330,42 @@ class main_GUI(QMainWindow):
             
     def update_all(self):
         #updating the beam
-        if self.beam != None:
+        if self.beam_type != None:
             exec("self.update_"+self.beam_type+"()")
-        #updating the supports
-        for sup in self.supports:
-            if sup != None:
-                exec(sup)
-        for load in self.loads:
-            if load != None:
-                exec(load)       
+            #updating the supports
+            for sup in self.supports:
+                if sup != None:
+                    exec(sup)
+            for load in self.loads:
+                if load != None:
+                    exec(load)
+            self.singularity_work()
+                
+                
+    def singularity_work(self):
+        #beam
+        self.beam_sym = beam_mech(self.beam.L,self.beam.E,self.beam.I)
+        #its own weight
+        self.beam_sym.apply_load(self.beam.func,0,0,self.beam.L)
+        self.beam
+        #loads
+        for i in range(0,len(self.loads)):
+            if self.loads[i] != None:
+                num = str(int(i + 1))
+                if eval("self.load_"+num+".order") < 0:
+                    self.beam_sym.apply_load(-eval("self.load_"+num+".l0"),\
+                                             eval("self.load_"+num+".x0"),\
+                                             eval("self.load_"+num+".order"))
+                else:
+                    self.beam_sym.apply_load(-eval("self.load_"+num+".l0"),\
+                                             eval("self.load_"+num+".x0"),\
+                                             eval("self.load_"+num+".order"),\
+                                             end=eval("self.load_"+num+".x1"))
+    
+        
+                
+                
+                
         
 # =============================================================================
 # creating beam widgets        
