@@ -88,7 +88,7 @@ class support:
 class fixed_support(support):
     #no axis of freedom
     def __init__(self,x):
-        support.__init__(self,False,False,False)
+        support.__init__(self,x,False,False,False)
         
 class y_ball_support(support):
     #can rotate and move up/down
@@ -112,38 +112,38 @@ class x_roller_support(support):
         
 class pin_support(support):
     
-    def __inint__(self,x):
+    def __init__(self,x):
         support.__init__(self,x,True,False,False)
         
 ############################# Loads ###########################################
-class load:
+class load_class:
     
     def __init__(self,start,finish,load_0,load_1):
         self.x0, self.x1, self.l0, self.l1 = start, finish, load_0, load_1
         
-class point_load(load):
+class point_load(load_class):
     
     def __init__(self,x,load):
-        load.__init__(self,x,x,load,load)
+        load_class.__init__(self,x,x,load,load)
         self.func = load
         
-class distributed_load(load):
+class distributed_load(load_class):
     
     def __init__(self,x0,x1,load_per_unit):
-        load.__init__(self,x0,x1, load_per_unit, load_per_unit)
+        load_class.__init__(self,x0,x1, load_per_unit, load_per_unit)
         self.func = load_per_unit
         
-class linear_load(load):
+class linear_load(load_class):
     
     def __init__(self,x0,x1,load0,load1):
-        load.__init__(self,x0,x1,load0,load1)
+        load_class.__init__(self,x0,x1,load0,load1)
         x = sp.Symbol("x")
         self.func = load0 + (load1-load0)/(x1-x0) * (x - x0)
         
-class parabolic_load(load):
+class parabolic_load(load_class):
     
     def __init__(self,x0,x1,load0,load1):
-        load.__init__(self,x0,x1,load0,load1)
+        load_class.__init__(self,x0,x1,load0,load1)
         x = sp.Symbol("x")
         if load1 > load0:
             self.func = load0 + ((x-x0)**2)*(load1-load0)/((x1-x0)**2)
@@ -163,7 +163,12 @@ class main_GUI(QMainWindow):
     
     def __init__(self,parent = None):
         QMainWindow.__init__(self,parent)
-        self.supports = ()
+        #init beam
+        self.beam = None
+        #init supports
+        self.supports = [None,None,None]
+        #init loads
+        self.loads = [None,None,None,None,None]
         #setting title
         self.title = "Beam loading"
         #setting menu
@@ -174,6 +179,7 @@ class main_GUI(QMainWindow):
         self.plot = MatplotlibCanvas()
         #creating buttons
         self.button_clear = QPushButton("Clear")
+        
         #clearing
         self.button_update = QPushButton("Update")
         self.button_update.clicked.connect(self.update_all)
@@ -214,9 +220,9 @@ class main_GUI(QMainWindow):
             self.menuFile = self.menuBar().addMenu("&File")
             #saveas stuff
             #
-            #
-            self.menuAdd = self.menuBar().addMenu("&Add")
-            #beam menu
+            #add menu #########################################################
+            self.menuAdd = self.menuBar().addMenu("&Add")       
+            #beam menu ###########################################
             self.subBeam = QMenu("&Beam",self)
             #rectangle
             self.actionRect = QAction("Rectangular",self)
@@ -240,18 +246,31 @@ class main_GUI(QMainWindow):
                                       self.actionCirc,self.actionCirc_hall, \
                                       self.actionI,self.actionTria])
             self.menuAdd.addMenu(self.subBeam)
-            #support menu
+            #support menu ##########################################
             self.subSupport = QMenu("&Support",self)
             self.subsubLim_x = QMenu("Limit horizontal movement", self)
             self.subsubLim_y = QMenu("Limit verticle movement",self)
             self.subsubLim_both = QMenu("Limit horizontal and verticle "+ \
                                         "movement", self)
+            #fixed support
             self.actionFixed = QAction("Fixed",self)
+            self.actionFixed.triggered.connect(self.create_fixed_support)
+            #pin support
             self.actionPin = QAction("Pin",self)
+            self.actionPin.triggered.connect(self.create_pin_support)
+            #yBall support
             self.actionBall_y = QAction("Ball (can rotate)", self)
+            self.actionBall_y.triggered.connect(self.create_y_ball_support)
+            #yRoll support
             self.actionRoll_y = QAction("Roller (cannot rotate)",self)
+            self.actionRoll_y.triggered.connect(self.create_y_roller_support)
+            #xBall support
             self.actionBall_x = QAction("Ball (can rotate)",self)
+            self.actionBall_x.triggered.connect(self.create_x_ball_support)
+            #XBall
             self.actionRoll_x = QAction("Roller (cannot rotate)",self)
+            self.actionRoll_x.triggered.connect(self.create_x_roller_support)
+            #sub menues
             self.subSupport.addMenu(self.subsubLim_x)
             self.subsubLim_x.addActions([self.actionBall_y,self.actionRoll_y])
             self.subSupport.addMenu(self.subsubLim_y)
@@ -259,22 +278,65 @@ class main_GUI(QMainWindow):
             self.subSupport.addMenu(self.subsubLim_both)
             self.subsubLim_both.addActions([self.actionFixed,self.actionPin])
             self.menuAdd.addMenu(self.subSupport)
-            #load menu
+            #load menu ################################################
             self.subLoad = QMenu("&Load",self)
+            #point load
             self.actionPoint = QAction("Point",self)
+            self.actionPoint.triggered.connect(self.create_point_load)
+            #distributed load
             self.actionDist = QAction("Distributed",self)
+            self.actionDist.triggered.connect(self.create_distributed_load)
+            #linear load
             self.actionLinear = QAction("Linear",self)
+            self.actionLinear.triggered.connect(self.create_linear_load)
+            #parabolic load
             self.actionPar = QAction("Parabolic",self)
+            self.actionPar.triggered.connect(self.create_parabolic_load)
             self.subLoad.addActions([self.actionPoint,self.actionDist,\
                                     self.actionLinear,self.actionPar])
             self.menuAdd.addMenu(self.subLoad)
+            #remove menu ######################################################
+            self.menuRemove = self.menuBar().addMenu("&Remove")
+            #supports
+            self.actionRemoveS1 = QAction("Support 1",self)
+            self.actionRemoveS1.triggered.connect(self.remove_support_1)
+            self.actionRemoveS2 = QAction("Support 2",self)
+            self.actionRemoveS2.triggered.connect(self.remove_support_2)
+            self.actionRemoveS3 = QAction("Support 3",self)
+            self.actionRemoveS3.triggered.connect(self.remove_support_3)
+            #loads
+            self.actionRemoveL1 = QAction("Load 1",self)
+            self.actionRemoveL1.triggered.connect(self.remove_load_1)
+            self.actionRemoveL2 = QAction("Load 2",self)
+            self.actionRemoveL2.triggered.connect(self.remove_load_2)
+            self.actionRemoveL3 = QAction("Load 3",self)
+            self.actionRemoveL3.triggered.connect(self.remove_load_3)
+            self.actionRemoveL4 = QAction("Load 4",self)
+            self.actionRemoveL4.triggered.connect(self.remove_load_4)
+            self.actionRemoveL5 = QAction("Load 5",self)
+            self.actionRemoveL5.triggered.connect(self.remove_load_5)
+            self.menuRemove.addActions([self.actionRemoveS1,\
+                                        self.actionRemoveS2,\
+                                        self.actionRemoveS3,\
+                                        self.actionRemoveL1,\
+                                        self.actionRemoveL2,\
+                                        self.actionRemoveL3,\
+                                        self.actionRemoveL4,\
+                                        self.actionRemoveL5])
         elif add != None:
             exec(add)
             
     def update_all(self):
         #updating the beam
-        exec("self.update_"+self.beam_type+"()")
-        print(self.beam.I)
+        if self.beam != None:
+            exec("self.update_"+self.beam_type+"()")
+        #updating the supports
+        for sup in self.supports:
+            if sup != None:
+                exec(sup)
+        for load in self.loads:
+            if load != None:
+                exec(load)       
         
 # =============================================================================
 # creating beam widgets        
@@ -415,14 +477,162 @@ class main_GUI(QMainWindow):
 # creating support widgets        
 # =============================================================================
         
-    def create_fixed_support(self):
-        num = len(self.supports) +1
-        row = 3 + 2*num
-        self.create_sub("support"+"_"+num,row,5,row+1,14,"Fixed Support","Location_x")
-        
-        
+    def first_empty_row(self,row_start,row_end,col):
+        for row in range(row_start,row_end):
+            if self.layout.itemAtPosition(row,col) == None:
+                return row
+        return None
     
+    def remove_support_1(self):
+        self.create_sub("remove",4,5,5,14)
+        self.supports[0] = None
         
+    def remove_support_2(self):
+        self.create_sub("remove",6,5,7,14)
+        self.supports[1] = None 
+    
+    def remove_support_3(self):
+        self.create_sub("remove",8,5,9,14)
+        self.supports[2] = None
+        
+    def create_fixed_support(self):
+        row = self.first_empty_row(4,9,5)
+        if row != None:
+            num = str(int(row/2-1))
+            self.create_sub("support"+"_"+num,row,5,row+1,14,\
+                            "Support_"+num+" Fixed Support","Location_x")
+            self.supports[int(num)-1] = ("self.support_"+num+\
+                          "= fixed_support(float(self.support_"+num+\
+                          "_Location_x(self)))")
+            
+    def create_y_ball_support(self):
+        row = self.first_empty_row(4,9,5)
+        if row != None:
+            num = str(int(row/2-1))
+            self.create_sub("support"+"_"+num,row,5,row+1,14,\
+                            "Support_"+num+" Verticle Ball Support",\
+                            "Location_x")
+            self.supports[int(num)-1] = ("self.support_"+num+\
+                          "= y_ball_support(float(self.support_"+num+\
+                          "_Location_x(self)))")
+            
+    def create_y_roller_support(self):
+        row = self.first_empty_row(4,9,5)
+        if row != None:
+            num = str(int(row/2-1))
+            self.create_sub("support"+"_"+num,row,5,row+1,14,\
+                            "Support_"+num+" Verticle Roller Support",\
+                            "Location_x")
+            self.supports[int(num)-1] = ("self.support_"+num+\
+                          "= y_roller_support(float(self.support_"+num+\
+                          "_Location_x(self)))")
+            
+    def create_x_ball_support(self):
+        row = self.first_empty_row(4,9,5)
+        if row != None:
+            num = str(int(row/2-1))
+            self.create_sub("support"+"_"+num,row,5,row+1,14,\
+                            "Support_"+num+" Horizontal Ball Support",\
+                            "Location_x")
+            self.supports[int(num)-1] = ("self.support_"+num+\
+                          "= x_ball_support(float(self.support_"+num+\
+                          "_Location_x(self)))")
+            
+    def create_x_roller_support(self):
+        row = self.first_empty_row(4,9,5)
+        if row != None:
+            num = str(int(row/2-1))
+            self.create_sub("support"+"_"+num,row,5,row+1,14,\
+                            "Support_"+num+" Horizontal Roller Support",\
+                            "Location_x")
+            self.supports[int(num)-1] = ("self.support_"+num+\
+                          "= x_roller_support(float(self.support_"+num+\
+                          "_Location_x(self)))")
+            
+    def create_pin_support(self):
+        row = self.first_empty_row(4,9,5)
+        if row != None:
+            num = str(int(row/2-1))
+            self.create_sub("support"+"_"+num,row,5,row+1,14,\
+                            "Support_"+num+" Pin Support","Location_x")
+            self.supports[int(num)-1] = ("self.support_"+num+\
+                          "= pin_support(float(self.support_"+num+\
+                          "_Location_x(self)))")
+            
+# =============================================================================
+# creating load widgets        
+# ============================================================================
+    
+    def remove_load_1(self):
+        self.create_sub("remove",10,5,11,14)
+        self.loads[0] = None
+        
+    def remove_load_2(self):
+        self.create_sub("remove",12,5,13,14)
+        self.loads[1] = None
+        
+    def remove_load_3(self):
+        self.create_sub("remove",14,5,15,14)
+        self.loads[2] = None
+        
+    def remove_load_4(self):
+        self.create_sub("remove",16,5,17,14)
+        self.loads[3] = None
+        
+    def remove_load_5(self):
+        self.create_sub("remove",18,5,19,14)
+        self.loads[0] = None
+        
+    def create_point_load(self):
+        row = self.first_empty_row(10,19,5)
+        if row != None:
+            num = str(int(row/2-4))
+            self.create_sub("load_"+num,row,5,row+1,14,"Load_"+num+\
+                            " Point Load","Location_x","Load")
+            self.loads[int(num)-1] = ("self.load_"+num+\
+                       " = point_load(float(self.load_"+num+\
+                       "_Location_x(self)),float(self.load_"+num+\
+                       "_Load(self)))")
+            
+    def create_distributed_load(self):
+        row = self.first_empty_row(10,19,5)
+        if row != None:
+            num = str(int(row/2-4))
+            self.create_sub("load_"+num,row,5,row+1,14,"Load_"+num+\
+                            " Distributed Load","Start_x","End_x","Load")
+            self.loads[int(num)-1] = ("self.load_"+num+\
+                       " = distributed_load(float(self.load_"+num+\
+                       "_Start_x(self)),float(self.load_"+num+\
+                       "_End_x(self)),float(self.load_"+num+\
+                       "_Load(self)))")
+            
+    def create_linear_load(self):
+        row = self.first_empty_row(10,19,5)
+        if row != None:
+            num = str(int(row/2-4))
+            self.create_sub("load_"+num,row,5,row+1,14,"Load_"+num+\
+                            " Linear Load","Start_x","End_x","Load_start","Load_end")
+            self.loads[int(num)-1] = ("self.load_"+num+\
+                       " = linear_load(float(self.load_"+num+\
+                       "_Start_x(self)),float(self.load_"+num+\
+                       "_End_x(self)),float(self.load_"+num+\
+                       "_Load_start(self)),float(self.load_"+num+\
+                       "_Load_end(self)))")
+            
+    def create_parabolic_load(self):
+        row = self.first_empty_row(10,19,5)
+        if row != None:
+            num = str(int(row/2-4))
+            self.create_sub("load_"+num,row,5,row+1,14,"Load_"+num+\
+                            " Parabolic Load","Start_x","End_x","Load_start","Load_end")
+            self.loads[int(num)-1] = ("self.load_"+num+\
+                       " = parabolic_load(float(self.load_"+num+\
+                       "_Start_x(self)),float(self.load_"+num+\
+                       "_End_x(self)),float(self.load_"+num+\
+                       "_Load_start(self)),float(self.load_"+num+\
+                       "_Load_end(self)))")
+            
+
 class MatplotlibCanvas(FigureCanvas):
     
     def __init__(self):
