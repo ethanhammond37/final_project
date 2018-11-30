@@ -347,7 +347,6 @@ class main_GUI(QMainWindow):
         self.beam_sym = beam_mech(self.beam.L,self.beam.E,self.beam.I)
         #its own weight
         self.beam_sym.apply_load(self.beam.func,0,0,self.beam.L)
-        self.beam
         #loads
         for i in range(0,len(self.loads)):
             if self.loads[i] != None:
@@ -361,7 +360,21 @@ class main_GUI(QMainWindow):
                                              eval("self.load_"+num+".x0"),\
                                              eval("self.load_"+num+".order"),\
                                              end=eval("self.load_"+num+".x1"))
-    
+        #supports
+        for i in range(0,len(self.supports)):
+            if self.supports[i] != None:
+                num = str(int(i+1))
+                #load limiting y axis movement
+                if eval("self.support_"+num+".y_f") == False:
+                    exec("R"+num+"=sp.symbols('R"+num+"')")
+                    exec("self.beam_sym.apply_load((R"+num+"),self.support_"+num+".x,-1)")
+                    exec("self.beam_sym.bc_deflection.append((self.support_"+num+".x,0))")
+                if eval("self.support_"+num+".r_f") == False:
+                    exec("M"+num+"=sp.symbols('M"+num+"')")
+                    exec("self.beam_sym.apply_load((R"+num+"),self.support_"+num+".x,-1)")
+                    exec("self.beam_sym.bc_slope.append((self.support_"+num+".x,0))")
+        exec("print(self.beam_sym.reaction_loads)")
+            
         
                 
                 
