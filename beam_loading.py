@@ -1,9 +1,15 @@
 ###############################################################################
 #                         Calculating stresses in a beam
 ###############################################################################
+#must be running sympy 1.3
+#command to change is: conda install sympy=1.3
+
 import numpy as np
 import sympy as sp
 from sympy.physics.continuum_mechanics.beam import Beam as beam_mech
+from sympy.core import S
+from sympy.functions import Piecewise, SingularityFunction
+#from sympy.physics.continuum_mechanics.beam import Beam3D as beam_mech_3D
 
 ###############################################################################
 #universal units
@@ -26,7 +32,7 @@ class rectangular_beam(beam):
         self.I = W*(H**3)/12
         self.c = (H/2)
         vol = L*H*W
-        self.func = vol*dens
+        self.func = vol*dens/L
         
 class rectangular_hallow_beam(beam):
     
@@ -35,7 +41,7 @@ class rectangular_hallow_beam(beam):
         self.h, self.w = h,w
         self.I = (W)*(H**3)/12 - (w)*(h**3)/12
         vol = L*(H*W-h*w)
-        self.func = vol*dens
+        self.func = vol*dens/L
         
         
 class circular_beam(beam):
@@ -46,7 +52,7 @@ class circular_beam(beam):
         self.I = (np.pi*D**4)/64
         self.c = (D/2)
         vol = L*np.pi*(D/2)**2
-        self.func = vol*dens
+        self.func = vol*dens/L
         
 class circular_hallow_beam(beam):
     
@@ -56,7 +62,7 @@ class circular_hallow_beam(beam):
         self.I = (np.pi*(D**4-d**4))/64
         self.c = (D/2)
         vol = L*np.pi*((D**2)-(d**2))/4
-        self.func = vol*dens
+        self.func = vol*dens/L
         
 class i_beam(beam):
     
@@ -68,7 +74,7 @@ class i_beam(beam):
         self.I = W*(H**3)/12 - b1*(d1**3)/12
         self.c = (H/2)
         vol = ((2*W*th)+(tw*(H-2*th)))*L
-        self.func = vol*dens
+        self.func = vol*dens/L
         
 class triangular_beam(beam):
     
@@ -77,7 +83,7 @@ class triangular_beam(beam):
         self. I = W*(H**3)/36
         self.c = (H/3)
         vol = L*W*H/2
-        self.func = vol*dens
+        self.func = vol*dens/L
         
 ############################### Supports ######################################
 class support:
@@ -153,8 +159,8 @@ class parabolic_load(load_class):
 import sys
 from PyQt5.QtWidgets import (QMainWindow, QDesktopWidget, QApplication, \
                              QWidget, QDialog, QLineEdit, QAction,\
-                             QMessageBox,QFileDialog,QMenu, QSizePolicy, \
-                             QComboBox, QPushButton, QGridLayout, QLabel)
+                             QFileDialog,QMenu, QSizePolicy, QPushButton,\
+                             QGridLayout, QLabel)
 from PyQt5.QtCore import Qt
 
 from matplotlib.backends.backend_qt5agg import FigureCanvas
@@ -165,10 +171,10 @@ class main_GUI(QMainWindow):
     def __init__(self,parent = None):
         QMainWindow.__init__(self,parent)
         #init beam
-        self.beam_type = None
+        main_GUI.beam_type = None
         self.beam = None
         #init supports
-        self.supports = [None,None,None]
+        self.supports = [None,None,None,None,None]
         #init loads
         self.loads = [None,None,None,None,None]
         #setting title
@@ -176,9 +182,12 @@ class main_GUI(QMainWindow):
         #setting menu
         self.menu_usermade(add = "init")
         #setting the geometry
-        self.geometry(1800,600,0,0)
+        self.geometry(1800,1200,0,0)
         #the plot
-        self.plot = MatplotlibCanvas()
+        self.deflection_plot = Deflection_Plot()
+        self.shear_plot = Shear_Plot()
+        self.bending_plot = Bending_Plot()
+        self.load_plot = Load_Plot()
         #creating buttons
         self.button_clear = QPushButton("Clear")
         
@@ -188,11 +197,14 @@ class main_GUI(QMainWindow):
         #adding a widget
         self.widget = QDialog()
         self.layout = QGridLayout()
-        self.layout.addWidget(self.plot,1,1,20,4)
+        self.layout.addWidget(self.load_plot,1,1,6,4)
+        self.layout.addWidget(self.shear_plot,7,1,6,4)
+        self.layout.addWidget(self.bending_plot,13,1,6,4)
+        self.layout.addWidget(self.deflection_plot,19,1,6,4)
         for col in range(1,4):
             self.layout.setColumnStretch(col,4)
-        self.layout.addWidget(self.button_clear,21,1,1,2,Qt.AlignCenter)
-        self.layout.addWidget(self.button_update,21,3,1,2,Qt.AlignCenter)
+        self.layout.addWidget(self.button_clear,25,1,1,2,Qt.AlignCenter)
+        self.layout.addWidget(self.button_update,25,3,1,2,Qt.AlignCenter)
         self.widget.setLayout(self.layout)
         self.setCentralWidget(self.widget)
         
@@ -306,6 +318,10 @@ class main_GUI(QMainWindow):
             self.actionRemoveS2.triggered.connect(self.remove_support_2)
             self.actionRemoveS3 = QAction("Support 3",self)
             self.actionRemoveS3.triggered.connect(self.remove_support_3)
+            self.actionRemoveS4 = QAction("Support 4",self)
+            self.actionRemoveS4.triggered.connect(self.remove_support_4)
+            self.actionRemoveS5 = QAction("Support 5",self)
+            self.actionRemoveS5.triggered.connect(self.remove_support_5)
             #loads
             self.actionRemoveL1 = QAction("Load 1",self)
             self.actionRemoveL1.triggered.connect(self.remove_load_1)
@@ -320,6 +336,8 @@ class main_GUI(QMainWindow):
             self.menuRemove.addActions([self.actionRemoveS1,\
                                         self.actionRemoveS2,\
                                         self.actionRemoveS3,\
+                                        self.actionRemoveS4,\
+                                        self.actionRemoveS5,\
                                         self.actionRemoveL1,\
                                         self.actionRemoveL2,\
                                         self.actionRemoveL3,\
@@ -328,10 +346,19 @@ class main_GUI(QMainWindow):
         elif add != None:
             exec(add)
             
+    def get_distance(self):
+        return("inches")
+        
+    def get_force(self):
+        return("lbs")
+        
+    def get_stress(self):
+        return("psi")
+            
     def update_all(self):
         #updating the beam
-        if self.beam_type != None:
-            exec("self.update_"+self.beam_type+"()")
+        if main_GUI.beam_type != None:
+            exec("self.update_"+main_GUI.beam_type+"()")
             #updating the supports
             for sup in self.supports:
                 if sup != None:
@@ -339,14 +366,23 @@ class main_GUI(QMainWindow):
             for load in self.loads:
                 if load != None:
                     exec(load)
+            #setting up the equations
             self.singularity_work()
-                
-                
+            #solving for the supports and showing them on the GUI
+            self.update_supports()
+            #pulls singularity equations
+            self.singularity_stats()
+            #recreates plots
+            self.deflection_plot.redraw(self.beam.L,self.deflection_sym)
+            self.shear_plot.redraw(self.beam.L,self.shear_sym)
+            self.bending_plot.redraw(self.beam.L,self.bending_sym)
+            self.load_plot.redraw(self.beam.L,self.load_sym)
+
     def singularity_work(self):
         #beam
         self.beam_sym = beam_mech(self.beam.L,self.beam.E,self.beam.I)
         #its own weight
-        self.beam_sym.apply_load(self.beam.func,0,0,self.beam.L)
+        self.beam_sym.apply_load(-self.beam.func,0,0,self.beam.L)
         #loads
         for i in range(0,len(self.loads)):
             if self.loads[i] != None:
@@ -360,25 +396,47 @@ class main_GUI(QMainWindow):
                                              eval("self.load_"+num+".x0"),\
                                              eval("self.load_"+num+".order"),\
                                              end=eval("self.load_"+num+".x1"))
+                    
+##### add linear and parabolid loads                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
         #supports
+        self.supports_reactions = []
+        self.supports_moments = []
         for i in range(0,len(self.supports)):
             if self.supports[i] != None:
                 num = str(int(i+1))
                 #load limiting y axis movement
                 if eval("self.support_"+num+".y_f") == False:
-                    exec("R"+num+"=sp.symbols('R"+num+"')")
-                    exec("self.beam_sym.apply_load((R"+num+"),self.support_"+num+".x,-1)")
-                    exec("self.beam_sym.bc_deflection.append((self.support_"+num+".x,0))")
+                    exec("self.R"+num+"=sp.symbols('R"+num+"')")
+                    exec("self.supports_reactions.append('self.R"+num+"')")
+                    exec("self.beam_sym.apply_load((self.R"+num+\
+                         "),self.support_"+num+".x,-1)")
+                    exec("self.beam_sym.bc_deflection.append((self.support_"+\
+                                                              num+".x,0))")
                 if eval("self.support_"+num+".r_f") == False:
-                    exec("M"+num+"=sp.symbols('M"+num+"')")
-                    exec("self.beam_sym.apply_load((R"+num+"),self.support_"+num+".x,-1)")
-                    exec("self.beam_sym.bc_slope.append((self.support_"+num+".x,0))")
-        exec("print(self.beam_sym.reaction_loads)")
-            
+                    exec("self.M"+num+"=sp.symbols('M"+num+"')")
+                    exec("self.supports_moments.append('self.M"+num+"')")
+                    exec("self.beam_sym.apply_load((self.M"+num+\
+                         "),self.support_"+num+".x,-2)")
+                    exec("self.beam_sym.bc_slope.append((self.support_"+num+\
+                                                         ".x,0))")
+        exec("self.beam_sym.solve_for_reaction_loads("+\
+             str(self.supports_reactions).replace("'","")[1:-1]+","+\
+             str(self.supports_moments).replace("'","")[1:-1]+")")
+        self.reactions = self.beam_sym.reaction_loads
         
-                
-                
-                
+    def singularity_stats(self):
+        self.deflection_sym = self.beam_sym.deflection()
+        self.bending_sym = self.beam_sym.bending_moment()
+        self.shear_sym = self.beam_sym.shear_force()
+        self.slope_sym = self.beam_sym.slope()
+        self.load_sym = self.beam_sym.load
         
 # =============================================================================
 # creating beam widgets        
@@ -438,22 +496,22 @@ class main_GUI(QMainWindow):
                             i = i + 1
               
     def create_rect_beam(self):
-        self.beam_type = "rect_beam"
+        main_GUI.beam_type = "rect_beam"
         self.create_sub("beam",1,5,3,14,"Rectangular Beam","Length","Height",\
-                        "Width","Youngs_Modulus","Specific_Gravity")
+                        "Width","Youngs_Modulus","Specific_Weight")
         
     def update_rect_beam(self):
         self.beam = rectangular_beam(float(self.beam_Length(self)),\
                                      float(self.beam_Height(self)),\
                                      float(self.beam_Width(self)),\
                                      float(self.beam_Youngs_Modulus(self)),\
-                                     float(self.beam_Specific_Gravity(self)))
+                                     float(self.beam_Specific_Weight(self)))
         
     def create_rect_hall_beam(self):
-        self.beam_type = "rect_hall_beam"
+        main_GUI.beam_type = "rect_hall_beam"
         self.create_sub("beam",1,5,3,14,"Rectangular (Hollow) Beam","Length",\
                         "Height","Width","Interior_Width","Interior_Height",\
-                        "Youngs_Modulus","Specific_Gravity")    
+                        "Youngs_Modulus","Specific_Weight")    
         
     def update_rect_hall_beam(self):
         self.beam = rectangular_hallow_beam(float(self.beam_Length(self)),\
@@ -462,37 +520,37 @@ class main_GUI(QMainWindow):
                                      float(self.beam_Interior_Height(self)),\
                                      float(self.beam_Interior_Width(self)),\
                                      float(self.beam_Youngs_Modulus(self)),\
-                                     float(self.beam_Specific_Gravity(self)))
+                                     float(self.beam_Specific_Weight(self)))
         
     def create_circular_beam(self):
-        self.beam_type = "circular_beam"
+        main_GUI.beam_type = "circular_beam"
         self.create_sub("beam",1,5,3,14,"Circular Beam","Length","Diameter",\
-                        "Youngs_Modulus","Specific_Gravity")    
+                        "Youngs_Modulus","Specific_Weight")    
         
     def update_circular_beam(self):
         self.beam = circular_beam(float(self.beam_Length(self)),\
                                      float(self.beam_Diameter(self)),\
                                      float(self.beam_Youngs_Modulus(self)),\
-                                     float(self.beam_Specific_Gravity(self)))
+                                     float(self.beam_Specific_Weight(self)))
         
     def create_circular_hall_beam(self):
-        self.beam_type = "circular_hall_beam"
+        main_GUI.beam_type = "circular_hall_beam"
         self.create_sub("beam",1,5,3,14,"Circular (Hallow) Beam","Length",\
                         "Diameter","Interior_Diameter","Youngs_Modulus",\
-                        "Specific_Gravity")
+                        "Specific_Weight")
         
     def update_circular_hall_beam(self):
         self.beam = circular_hallow_beam(float(self.beam_Length(self)),\
                                      float(self.beam_Diameter(self)),\
                                      float(self.beam_Interior_Diameter(self)),\
                                      float(self.beam_Youngs_Modulus(self)),\
-                                     float(self.beam_Specific_Gravity(self)))
+                                     float(self.beam_Specific_Weight(self)))
         
     def create_i_beam(self):
-        self.beam_type = "i_beam"
+        main_GUI.beam_type = "i_beam"
         self.create_sub("beam",1,5,3,14,"I Beam","Length","Height","Width",\
                         "Top_Bottom_Tickness","Center_Thickness",\
-                        "Youngs_Modulus","Specific_Gravity")
+                        "Youngs_Modulus","Specific_Weight")
         
     def update_i_beam(self):
         self.beam = i_beam(float(self.beam_Length(self)),\
@@ -501,19 +559,19 @@ class main_GUI(QMainWindow):
                            float(self.beam_Top_Bottom_Thickness(self)),\
                            float(self.beam_Center_Thickness(self)),\
                            float(self.beam_Youngs_Modulus(self)),\
-                           float(self.beam_Specific_Gravity(self)))
+                           float(self.beam_Specific_Weight(self)))
         
     def create_tria_beam(self):
-        self.beam_type = "tria_beam"
+        main_GUI.beam_type = "tria_beam"
         self.create_sub("beam",1,5,3,14,"Rectangular Beam","Length","Height",\
-                        "Width","Youngs_Modulus","Specific_Gravity")
+                        "Width","Youngs_Modulus","Specific_Weight")
         
     def update_tria_beam(self):
         self.beam = triangular_beam(float(self.beam_Length(self)),\
                                      float(self.beam_Height(self)),\
                                      float(self.beam_Width(self)),\
                                      float(self.beam_Youngs_Modulus(self)),\
-                                     float(self.beam_Specific_Gravity(self)))
+                                     float(self.beam_Specific_Weight(self)))
         
 # =============================================================================
 # creating support widgets        
@@ -536,9 +594,44 @@ class main_GUI(QMainWindow):
     def remove_support_3(self):
         self.create_sub("remove",8,5,9,14)
         self.supports[2] = None
+     
+    def remove_support_4(self):
+        self.create_sub("remove",10,5,11,14)
+        self.supports[2] = None
+        
+    def remove_support_5(self):
+        self.create_sub("remove",12,5,13,14)
+        self.supports[2] = None
+        
+        
+    def update_supports(self):
+        for i in range(0,len(self.supports)):
+            num = str(int(i+1))
+            row = int(i*2+5)
+            col = int(7)
+            if self.supports[i] != None:
+                if eval("self.support_"+num+".y_f") == False:
+                    self.create_sub("remove",row,col,row,col+1)
+                    force = eval("self.reactions[self.R"+num+"]")
+                    exec("self.label"+str(row)+"_"+str(col)+"=QLabel('Reaction_Force:')")
+                    exec("self.layout.addWidget(self.label"+str(row)+"_"+str(col)+","+str(row)+","+str(col)+",1,1,Qt.AlignRight)")
+                    col = col + 1
+                    exec("self.label"+str(row)+"_"+str(col)+"=QLabel('"+str(round(force,2))+"')")
+                    exec("self.layout.addWidget(self.label"+str(row)+"_"+str(col)+","+str(row)+","+str(col)+",1,1)")
+                    col = col + 1
+                if eval("self.support_"+num+".r_f") == False:
+                    self.create_sub("remove",row,col,row,col+1)
+                    moment = eval("self.reactions[self.M"+num+"]")
+                    exec("self.label"+str(row)+"_"+str(col)+"=QLabel('Reaction_Moment:')")
+                    exec("self.layout.addWidget(self.label"+str(row)+"_"+str(col)+","+str(row)+","+str(col)+",1,1,Qt.AlignRight)")
+                    col = col + 1
+                    exec("self.label"+str(row)+"_"+str(col)+"=QLabel('"+str(round(moment,2))+"')")
+                    exec("self.layout.addWidget(self.label"+str(row)+"_"+str(col)+","+str(row)+","+str(col)+",1,1)")
+                    col = col + 1
+        
         
     def create_fixed_support(self):
-        row = self.first_empty_row(4,9,5)
+        row = self.first_empty_row(4,13,5)
         if row != None:
             num = str(int(row/2-1))
             self.create_sub("support"+"_"+num,row,5,row+1,14,\
@@ -548,7 +641,7 @@ class main_GUI(QMainWindow):
                           "_Location_x(self)))")
             
     def create_y_ball_support(self):
-        row = self.first_empty_row(4,9,5)
+        row = self.first_empty_row(4,13,5)
         if row != None:
             num = str(int(row/2-1))
             self.create_sub("support"+"_"+num,row,5,row+1,14,\
@@ -559,7 +652,7 @@ class main_GUI(QMainWindow):
                           "_Location_x(self)))")
             
     def create_y_roller_support(self):
-        row = self.first_empty_row(4,9,5)
+        row = self.first_empty_row(4,13,5)
         if row != None:
             num = str(int(row/2-1))
             self.create_sub("support"+"_"+num,row,5,row+1,14,\
@@ -570,7 +663,7 @@ class main_GUI(QMainWindow):
                           "_Location_x(self)))")
             
     def create_x_ball_support(self):
-        row = self.first_empty_row(4,9,5)
+        row = self.first_empty_row(4,13,5)
         if row != None:
             num = str(int(row/2-1))
             self.create_sub("support"+"_"+num,row,5,row+1,14,\
@@ -581,7 +674,7 @@ class main_GUI(QMainWindow):
                           "_Location_x(self)))")
             
     def create_x_roller_support(self):
-        row = self.first_empty_row(4,9,5)
+        row = self.first_empty_row(4,13,5)
         if row != None:
             num = str(int(row/2-1))
             self.create_sub("support"+"_"+num,row,5,row+1,14,\
@@ -592,7 +685,7 @@ class main_GUI(QMainWindow):
                           "_Location_x(self)))")
             
     def create_pin_support(self):
-        row = self.first_empty_row(4,9,5)
+        row = self.first_empty_row(4,13,5)
         if row != None:
             num = str(int(row/2-1))
             self.create_sub("support"+"_"+num,row,5,row+1,14,\
@@ -606,29 +699,29 @@ class main_GUI(QMainWindow):
 # ============================================================================
     
     def remove_load_1(self):
-        self.create_sub("remove",10,5,11,14)
+        self.create_sub("remove",14,5,15,14)
         self.loads[0] = None
         
     def remove_load_2(self):
-        self.create_sub("remove",12,5,13,14)
+        self.create_sub("remove",16,5,17,14)
         self.loads[1] = None
         
     def remove_load_3(self):
-        self.create_sub("remove",14,5,15,14)
+        self.create_sub("remove",18,5,19,14)
         self.loads[2] = None
         
     def remove_load_4(self):
-        self.create_sub("remove",16,5,17,14)
+        self.create_sub("remove",20,5,21,14)
         self.loads[3] = None
         
     def remove_load_5(self):
-        self.create_sub("remove",18,5,19,14)
+        self.create_sub("remove",22,5,23,14)
         self.loads[0] = None
         
     def create_point_load(self):
-        row = self.first_empty_row(10,19,5)
+        row = self.first_empty_row(14,23,5)
         if row != None:
-            num = str(int(row/2-4))
+            num = str(int(row/2-6))
             self.create_sub("load_"+num,row,5,row+1,14,"Load_"+num+\
                             " Point Load","Location_x","Load")
             self.loads[int(num)-1] = ("self.load_"+num+\
@@ -637,9 +730,9 @@ class main_GUI(QMainWindow):
                        "_Load(self)))")
             
     def create_distributed_load(self):
-        row = self.first_empty_row(10,19,5)
+        row = self.first_empty_row(14,23,5)
         if row != None:
-            num = str(int(row/2-4))
+            num = str(int(row/2-6))
             self.create_sub("load_"+num,row,5,row+1,14,"Load_"+num+\
                             " Distributed Load","Start_x","End_x","Load")
             self.loads[int(num)-1] = ("self.load_"+num+\
@@ -649,9 +742,9 @@ class main_GUI(QMainWindow):
                        "_Load(self)))")
             
     def create_linear_load(self):
-        row = self.first_empty_row(10,19,5)
+        row = self.first_empty_row(14,23,5)
         if row != None:
-            num = str(int(row/2-4))
+            num = str(int(row/2-6))
             self.create_sub("load_"+num,row,5,row+1,14,"Load_"+num+\
                             " Linear Load","Start_x","End_x","Load_start","Load_end")
             self.loads[int(num)-1] = ("self.load_"+num+\
@@ -662,9 +755,9 @@ class main_GUI(QMainWindow):
                        "_Load_end(self)))")
             
     def create_parabolic_load(self):
-        row = self.first_empty_row(10,19,5)
+        row = self.first_empty_row(14,23,5)
         if row != None:
-            num = str(int(row/2-4))
+            num = str(int(row/2-6))
             self.create_sub("load_"+num,row,5,row+1,14,"Load_"+num+\
                             " Parabolic Load","Start_x","End_x","Load_start","Load_end")
             self.loads[int(num)-1] = ("self.load_"+num+\
@@ -675,39 +768,169 @@ class main_GUI(QMainWindow):
                        "_Load_end(self)))")
             
 
-class MatplotlibCanvas(FigureCanvas):
+class Deflection_Plot(FigureCanvas):
     
     def __init__(self):
         self.fig = Figure()
-        self.axes = self.fig.add_subplot(111)
-        self.axes.clear()
-        units = self.get_units()
-        self.axes.set_xlabel("x ("+units+")")
-        self.axes.set_ylabel("y ("+units+")")
-        self.axes.set_title("")
-        
+        self.deflection_plot = self.fig.add_subplot(111)
+        self.deflection_plot.clear()
+        distance = main_GUI.get_distance(main_GUI)
+        self.deflection_plot.set_xlabel("x ("+distance+")")
+        self.deflection_plot.set_ylabel("y ("+distance+")")
+        self.deflection_plot.set_title("Deflection")
         FigureCanvas.__init__(self,self.fig)
         FigureCanvas.setSizePolicy(self,
                                    QSizePolicy.Expanding,
                                    QSizePolicy.Expanding)
-        #FigureCanvas.setMaximumHeight(400)
         FigureCanvas.updateGeometry(self)
     
-    def redraw(self):
-        self.axes.clear()
-        x = np.arange(1,10,1)
-        y = np.arange(1,10,1)
-        self.axes.plot(x,y)
+    def redraw(self, l, y):
+        n = 500
+        self.deflection_plot.clear()
+        distance = main_GUI.get_distance(main_GUI)
+        x = sp.symbols('x')
+        x_array = np.linspace(0,l,n)
+        x_array[n-1] = x_array[n-1] - 10**-7
+        y_array = [y.subs(x,p) for p in x_array]
+        y_max,y_min = max(y_array),min(y_array)
+        if y_max > (-y_min): 
+            deflection = y_max
+        else:
+            deflection = y_min
+        y_zero = [0.0 for p in x_array]
+        self.deflection_plot.plot(x_array,y_array,'r',x_array,y_zero,'k')
+        self.deflection_plot.set_title(str(main_GUI.beam_type) +" Deflection (max deflection = "+str(round(deflection,6))+" "+distance+")")
         self.draw()
         
-    def get_units(self):
-        return "IPS"
+class Shear_Plot(FigureCanvas):
     
-    def get_density(self):
-        return "lbf/in^3"
+    def __init__(self):
+        self.fig = Figure()
+        self.shear_plot = self.fig.add_subplot(111)
+        self.shear_plot.clear()
+        distance = main_GUI.get_distance(main_GUI)
+        force = main_GUI.get_force(main_GUI)
+        self.shear_plot.set_xlabel("x ("+distance+")")
+        self.shear_plot.set_ylabel("y ("+force+")")
+        self.shear_plot.set_title("Shear")
+        FigureCanvas.__init__(self,self.fig)
+        FigureCanvas.setSizePolicy(self,
+                                   QSizePolicy.Expanding,
+                                   QSizePolicy.Expanding)
+        FigureCanvas.updateGeometry(self)
+    
+    def redraw(self, l, y):
+        n = 500
+        self.shear_plot.clear()
+        force = main_GUI.get_force(main_GUI)
+        distance = main_GUI.get_distance(main_GUI)
+        x = sp.symbols('x')
+        x_array = np.linspace(0,l,n)
+        x_array[n-1] = x_array[n-1] - 10**-7
+        y_array = [y.subs(x,p) for p in x_array]
+        y_max,y_min = max(y_array),min(y_array)
+        if y_min == float('-inf'):
+            shear = y_max
+        elif y_max == float('+inf'):
+            shear = y_min
+        elif y_max > (-y_min):
+            shear = y_max
+        else:
+            shear = y_min
+        y_zero = [0.0 for p in x_array]
+        self.shear_plot.plot(x_array,y_array,'r',x_array,y_zero,'k')
+        self.shear_plot.set_title(str(main_GUI.beam_type) +" Shear (max shear = "+str(round(shear,6))+" "+force+")")
+        self.shear_plot.set_xlabel("x ("+distance+")")
+        self.shear_plot.set_ylabel("y ("+force+")")
+        self.draw()
         
-
-
+class Bending_Plot(FigureCanvas):
+    
+    def __init__(self):
+        self.fig = Figure()
+        self.bending_plot = self.fig.add_subplot(111)
+        self.bending_plot.clear()
+        distance = main_GUI.get_distance(main_GUI)
+        force = main_GUI.get_force(main_GUI)
+        self.bending_plot.set_xlabel("x ("+distance+")")
+        self.bending_plot.set_ylabel("y ("+force+"-"+distance+")")
+        self.bending_plot.set_title("Bending")
+        FigureCanvas.__init__(self,self.fig)
+        FigureCanvas.setSizePolicy(self,
+                                   QSizePolicy.Expanding,
+                                   QSizePolicy.Expanding)
+        FigureCanvas.updateGeometry(self)
+    
+    def redraw(self, l, y):
+        n = 500
+        self.bending_plot.clear()
+        force = main_GUI.get_force(main_GUI)
+        distance = main_GUI.get_distance(main_GUI)
+        x = sp.symbols('x')
+        x_array = np.linspace(0,l,n)
+        x_array[n-1] = x_array[n-1] - 10**-7
+        y_array = [y.subs(x,p) for p in x_array]
+        y_max,y_min = max(y_array),min(y_array)
+        if y_min == float('-inf'):
+            bending = y_max
+        elif y_max == float('+inf'):
+            bending = y_min
+        elif y_max > (-y_min):
+            bending = y_max
+        else:
+            bending = y_min
+        y_zero = [0.0 for p in x_array]
+        self.bending_plot.plot(x_array,y_array,'r',x_array,y_zero,'k')
+        self.bending_plot.set_title(str(main_GUI.beam_type) +" Bending (max moment = "+str(round(bending,4))+" "+force+"-"+distance+")")
+        self.bending_plot.set_xlabel("x ("+distance+")")
+        self.bending_plot.set_ylabel("y ("+force+"-"+distance+")")
+        self.draw()
+        
+class Load_Plot(FigureCanvas):
+    
+    def __init__(self):
+        self.fig = Figure()
+        self.load_plot = self.fig.add_subplot(111)
+        self.load_plot.clear()
+        distance = main_GUI.get_distance(main_GUI)
+        force = main_GUI.get_force(main_GUI)
+        self.load_plot.set_xlabel("x ("+distance+")")
+        self.load_plot.set_ylabel("y ("+force+")")
+        self.load_plot.set_title("Loading")
+        FigureCanvas.__init__(self,self.fig)
+        FigureCanvas.setSizePolicy(self,
+                                   QSizePolicy.Expanding,
+                                   QSizePolicy.Expanding)
+        FigureCanvas.updateGeometry(self)
+    
+    def redraw(self, l, y):
+        n = 500
+        self.load_plot.clear()
+        force = main_GUI.get_force(main_GUI)
+        distance = main_GUI.get_distance(main_GUI)
+        x = sp.symbols('x')
+        x_array = np.linspace(0,l,n)
+        y_array = [y.subs(x,p) for p in x_array]
+        print(y_array[0])
+        for i in range(0,len(y_array)):
+            if str(y_array[i]) == 'nan':
+                y_array[i] = 0.0
+        y_array[0],y_array[n-1] = 0.0,0.0
+        y_max,y_min = max(y_array),min(y_array)
+        if y_min == float('-inf'):
+            load = y_max
+        elif y_max == float('+inf'):
+            load = y_min
+        elif y_max > (-y_min):
+            load = y_max
+        else:
+            load = y_min
+        y_zero = [0.0 for p in x_array]
+        self.load_plot.plot(x_array,y_array,'r',x_array,y_zero,'k')
+        self.load_plot.set_title(str(main_GUI.beam_type) +" Loading (max load = "+str(round(load,4))+" "+force+")")
+        self.load_plot.set_xlabel("x ("+distance+")")
+        self.load_plot.set_ylabel("y ("+force+")")
+        self.draw()
         
 if __name__ == "__main__":
     app = QApplication(sys.argv)
