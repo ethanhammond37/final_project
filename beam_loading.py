@@ -6,7 +6,8 @@
 
 import numpy as np
 import sympy as sp
-from sympy.physics.continuum_mechanics.beam import Beam as beam_mech
+#from sympy.physics.continuum_mechanics.beam import Beam as beam_mech
+from beam_modified import Beam as beam_mech
 from sympy.core import S
 from sympy.functions import Piecewise, SingularityFunction
 #from sympy.physics.continuum_mechanics.beam import Beam3D as beam_mech_3D
@@ -911,7 +912,6 @@ class Load_Plot(FigureCanvas):
         x = sp.symbols('x')
         x_array = np.linspace(0,l,n)
         y_array = [y.subs(x,p) for p in x_array]
-        print(y_array[0])
         for i in range(0,len(y_array)):
             if str(y_array[i]) == 'nan':
                 y_array[i] = 0.0
