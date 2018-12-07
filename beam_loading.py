@@ -1,17 +1,24 @@
 ###############################################################################
 #                         Calculating stresses in a beam
 ###############################################################################
-#must be running sympy 1.3
-#command to change is: conda install sympy=1.3
 
 import numpy as np
 import sympy as sp
+import sys
+#next line removed because "beam.py" had to be modified
 #from sympy.physics.continuum_mechanics.beam import Beam as beam_mech
 from beam_modified import Beam as beam_mech
 from sympy.core import S
 from sympy.functions import Piecewise, SingularityFunction
+#next line could be used if application was converted to a 3D analysisi
 #from sympy.physics.continuum_mechanics.beam import Beam3D as beam_mech_3D
 
+#ensures sympy is updatd to 1.3
+if float(sp.__version__) < 1.3:
+    print("Must update sympy version from ",sp.__version__," to 1.3.")
+    print("Use command 'conda install sympy=1.3'")
+    sys.exit()
+    
 ###############################################################################
 #universal units
 units = "IPS"
