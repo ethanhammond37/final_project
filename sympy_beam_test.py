@@ -20,7 +20,8 @@ from matplotlib.figure import Figure
 class testtest():
     
     def __init__(self):
-        from sympy.physics.continuum_mechanics.beam import Beam as beam_mech
+        #from sympy.physics.continuum_mechanics.beam import Beam as beam_mech
+        from beam_modified import Beam as beam_mech
         from sympy import symbols
         E,L,I = symbols('E,L,I')
         self.R1, self.R2, self.M1 = symbols('R1,R2, M1')
@@ -33,8 +34,8 @@ class testtest():
         beam_sym.apply_load(self.R2,100,-1)
         beam_sym.apply_load(self.M1,0,-2)
         #beam_sym.apply_load(-80000,0,0, end = 50)
-        beam_sym.apply_load(50,5,-2,)
-        beam_sym.apply_load(-12,50,-1)
+        beam_sym.apply_load(-1,50,0,end=80)
+        #beam_sym.apply_load(-12,50,-1)
         beam_sym.bc_slope.append((0,0))
         beam_sym.bc_deflection.append((0,0))
         beam_sym.bc_deflection.append((100,0))
@@ -47,7 +48,7 @@ class testtest():
         print("test")
         print(beam_sym.max_shear_force())
         print(beam_sym.max_deflection())
-        self.plot = beam_sym.plot_deflection()
+        self.plot = beam_sym.plot_loading_results()
         #beam_sym.plot_shear_force()
         #beam_sym.plot_bending_moment()
         print(beam_sym.load)

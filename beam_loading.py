@@ -5,11 +5,10 @@
 import numpy as np
 import sympy as sp
 import sys
+import time
 #next line removed because "beam.py" had to be modified
 #from sympy.physics.continuum_mechanics.beam import Beam as beam_mech
 from beam_modified import Beam as beam_mech
-from sympy.core import S
-from sympy.functions import Piecewise, SingularityFunction
 #next line could be used if application was converted to a 3D analysisi
 #from sympy.physics.continuum_mechanics.beam import Beam3D as beam_mech_3D
 
@@ -18,11 +17,10 @@ if float(sp.__version__) < 1.3:
     print("Must update sympy version from ",sp.__version__," to 1.3.")
     print("Use command 'conda install sympy=1.3'")
     sys.exit()
+#==============================================================================
+#                  Creating beam, support, and load objects
+#==============================================================================
     
-###############################################################################
-#universal units
-units = "IPS"
-
 ################################# Beams #######################################
 class beam:
     
@@ -50,7 +48,6 @@ class rectangular_hallow_beam(beam):
         self.I = (W)*(H**3)/12 - (w)*(h**3)/12
         vol = L*(H*W-h*w)
         self.func = vol*dens/L
-        
         
 class circular_beam(beam):
     
@@ -151,40 +148,55 @@ class distributed_load(load_class):
 class linear_load(load_class):
     
     def __init__(self,x0,x1,load0,load1):
+        if x0 > x1:
+            x0,x1 = x1,x0
+            load0, load1 = load1, load0
         load_class.__init__(self,x0,x1,load0,load1,1)
-        x = sp.Symbol("x")
-        self.func = load0 + (load1-load0)/(x1-x0) * (x - x0)
+        self.func = (load1-load0)/(x1-x0)
         
 class parabolic_load(load_class):
     
     def __init__(self,x0,x1,load0,load1):
         load_class.__init__(self,x0,x1,load0,load1,2)
-        x = sp.Symbol("x")
-        if load1 > load0:
-            self.func = load0 + ((x-x0)**2)*(load1-load0)/((x1-x0)**2)
+        if x0 > x1:
+            x0,x1 = x1,x0
+            load0, load1 = load1, load0
+        self.func = (load1-load0)/((x1-x0)**2)
             
-############################# creating the GUI ################################
+            
+#==============================================================================
+#                                Creating the GUI
+#==============================================================================          
 import sys
 from PyQt5.QtWidgets import (QMainWindow, QDesktopWidget, QApplication, \
                              QWidget, QDialog, QLineEdit, QAction,\
                              QFileDialog,QMenu, QSizePolicy, QPushButton,\
                              QGridLayout, QLabel)
+from PyQt5.QtGui import QPixmap
 from PyQt5.QtCore import Qt
-
 from matplotlib.backends.backend_qt5agg import FigureCanvas
 from matplotlib.figure import Figure
 
 class main_GUI(QMainWindow):
     
     def __init__(self,parent = None):
+        """
+        Initializes the GUI
+        (Adding buttons, plots, and menus)
+        """
         QMainWindow.__init__(self,parent)
         #init beam
         main_GUI.beam_type = None
         self.beam = None
+        self.beam_sheet_visible = False
         #init supports
         self.supports = [None,None,None,None,None]
         #init loads
         self.loads = [None,None,None,None,None]
+        #default units
+        main_GUI.distance = "inches"
+        main_GUI.force = "pounds"
+        main_GUI.stress = "psi"
         #setting title
         self.title = "Beam loading"
         #setting menu
@@ -196,9 +208,6 @@ class main_GUI(QMainWindow):
         self.shear_plot = Shear_Plot()
         self.bending_plot = Bending_Plot()
         self.load_plot = Load_Plot()
-        #creating buttons
-        self.button_clear = QPushButton("Clear")
-        
         #clearing
         self.button_update = QPushButton("Update")
         self.button_update.clicked.connect(self.update_all)
@@ -211,12 +220,14 @@ class main_GUI(QMainWindow):
         self.layout.addWidget(self.deflection_plot,19,1,6,4)
         for col in range(1,4):
             self.layout.setColumnStretch(col,4)
-        self.layout.addWidget(self.button_clear,25,1,1,2,Qt.AlignCenter)
         self.layout.addWidget(self.button_update,25,3,1,2,Qt.AlignCenter)
         self.widget.setLayout(self.layout)
         self.setCentralWidget(self.widget)
         
     def geometry(self,x_initial,y_initial,x_plus,y_plus):
+        """
+        Sets the geometry of the main GUI.
+        """
         if x_initial > 0:
             self.width = x_initial
         if y_initial > 0:
@@ -233,15 +244,17 @@ class main_GUI(QMainWindow):
         self.move(qtscreen.topLeft())
         self.show()
         
-# =============================================================================
-# Creating the menue
-# =============================================================================
-        
+############################ Creating the menus ###############################      
     def menu_usermade(self,add=None):
+        """
+        Creates the File, Add, and Remove menus.
+        """
         if add == "init":
             self.menuFile = self.menuBar().addMenu("&File")
             #saveas stuff
-            #
+            self.actionSaveAs = QAction("Save as",self)
+            self.actionSaveAs.triggered.connect(self.screenshot_gui)
+            self.menuFile.addActions([self.actionSaveAs])
             #add menu #########################################################
             self.menuAdd = self.menuBar().addMenu("&Add")       
             #beam menu ###########################################
@@ -289,7 +302,7 @@ class main_GUI(QMainWindow):
             #xBall support
             self.actionBall_x = QAction("Ball (can rotate)",self)
             self.actionBall_x.triggered.connect(self.create_x_ball_support)
-            #XBall
+            #xRoll support
             self.actionRoll_x = QAction("Roller (cannot rotate)",self)
             self.actionRoll_x.triggered.connect(self.create_x_roller_support)
             #sub menues
@@ -351,17 +364,52 @@ class main_GUI(QMainWindow):
                                         self.actionRemoveL3,\
                                         self.actionRemoveL4,\
                                         self.actionRemoveL5])
+            #Units Menu
+            self.menuUnits = self.menuBar().addMenu("&Units")
+            self.actionIPS = QAction("Inches, Pounds, PSI",self)
+            self.actionIPS.triggered.connect(lambda: self.get_distance(reset = "Inches"))
+            self.actionIPS.triggered.connect(lambda: self.get_force(reset = "Pounds"))
+            self.actionIPS.triggered.connect(lambda: self.get_stress(reset = "PSI"))
+            self.actionMMGS = QAction("Millimeters, Newtons, Megapascals",self)
+            self.actionMMGS.triggered.connect(lambda: self.get_distance(reset = "Millimeters"))
+            self.actionMMGS.triggered.connect(lambda: self.get_force(reset = "Newtons"))
+            self.actionMMGS.triggered.connect(lambda: self.get_stress(reset = "Megapascals"))
+            self.actionMKGS = QAction("Meters, Kilonewtons, Kilopascals",self)
+            self.actionMKGS.triggered.connect(lambda: self.get_distance(reset = "Meters"))
+            self.actionMKGS.triggered.connect(lambda: self.get_force(reset = "Kilonewtons"))
+            self.actionMKGS.triggered.connect(lambda: self.get_stress(reset = "Kilopascals"))
+            self.actionFPS = QAction("Feet, Pounds, PSF",self)
+            self.actionFPS.triggered.connect(lambda: self.get_distance("Feet"))
+            self.actionFPS.triggered.connect(lambda: self.get_force("Pounds"))
+            self.actionFPS.triggered.connect(lambda: self.get_stress("PSF"))
+            self.menuUnits.addActions([self.actionIPS,self.actionFPS,\
+                                       self.actionMMGS,self.actionMKGS])
+            #Help menu
+            self.menuHelp = self.menuBar().addMenu("&Help")
+            self.actionBeamSheet = QAction("Beam Types",self)
+            self.actionBeamSheet.triggered.connect(self.show_beam_sheet)
+            self.menuHelp.addActions([self.actionBeamSheet])
+            
         elif add != None:
             exec(add)
             
-    def get_distance(self):
-        return("inches")
+    def get_distance(self,reset):
+        if reset != None:
+            main_GUI.distance = reset
+        else:
+            return(main_GUI.distance)
         
-    def get_force(self):
-        return("lbs")
+    def get_force(self,reset):
+        if reset != None:
+            self.force = reset
+        else:
+            return(self.force)
         
-    def get_stress(self):
-        return("psi")
+    def get_stress(self,reset):
+        if reset != None:
+            self.stress = reset                                                                                                                                                                                                                                                                                                                                                                                                                                                           
+        else:
+            return(self.stress)
             
     def update_all(self):
         #updating the beam
@@ -399,20 +447,48 @@ class main_GUI(QMainWindow):
                     self.beam_sym.apply_load(-eval("self.load_"+num+".l0"),\
                                              eval("self.load_"+num+".x0"),\
                                              eval("self.load_"+num+".order"))
-                else:
+                elif eval("self.load_"+num+".order") == 0:
                     self.beam_sym.apply_load(-eval("self.load_"+num+".l0"),\
                                              eval("self.load_"+num+".x0"),\
                                              eval("self.load_"+num+".order"),\
                                              end=eval("self.load_"+num+".x1"))
-                    
-##### add linear and parabolid loads                    
-                    
-                    
-                    
-                    
-                    
-                    
-                    
+                elif eval("self.load_"+num+".order") == 1:
+                    self.beam_sym.apply_load(-eval("self.load_"+num+".l0"),\
+                                             eval("self.load_"+num+".x0"),\
+                                             0,\
+                                             end=eval("self.load_"+num+".x1"))
+                    self.beam_sym.apply_load(-eval("self.load_"+num+".func"),\
+                                             eval("self.load_"+num+".x0"),\
+                                             eval("self.load_"+num+".order"),\
+                                             end=eval("self.load_"+num+".x1"))
+                    if eval("self.load_"+num+".x1") < self.beam.L:
+                        offset = eval("self.load_"+num+".l1 - self.load_"+num+".l0")
+                        self.beam_sym.apply_load(0.9*offset,\
+                                                 eval("self.load_"+num+".x1"),\
+                                                 0,\
+                                                 end = self.beam.L)
+                else:
+                    self.beam_sym.apply_load(-eval("self.load_"+num+".l0"),\
+                         eval("self.load_"+num+".x0"),\
+                         0,\
+                         end=eval("self.load_"+num+".x1"))
+                    self.beam_sym.apply_load(-eval("self.load_"+num+".func"),\
+                                             eval("self.load_"+num+".x0"),\
+                                             eval("self.load_"+num+".order"),\
+                                             end=eval("self.load_"+num+".x1"))
+                    if eval("self.load_"+num+".x1") < self.beam.L:
+                        func = eval("self.load_"+num+".func")
+                        x1 = eval("self.load_"+num+".x1")
+                        offset = func*((x1+0.1)**2 - (x1-0.1)**2)/0.2
+                        self.beam_sym.apply_load(offset,\
+                                                 eval("self.load_"+num+".x1"),\
+                                                 1,\
+                                                 end = self.beam.L)
+                        offset_2 = eval("self.load_"+num+".l1 - self.load_"+num+".l0")
+                        self.beam_sym.apply_load(offset_2,\
+                                                 eval("self.load_"+num+".x1"),\
+                                                 0,\
+                                                 end = self.beam.L)
         #supports
         self.supports_reactions = []
         self.supports_moments = []
@@ -445,6 +521,27 @@ class main_GUI(QMainWindow):
         self.shear_sym = self.beam_sym.shear_force()
         self.slope_sym = self.beam_sym.slope()
         self.load_sym = self.beam_sym.load
+        
+    def screenshot_gui(self):
+        self.img, self.ftype = QFileDialog.getSaveFileName(self,"test 1",filter = ".png;;.jpg")
+        time.sleep(0.4)
+        self.screen = QApplication.primaryScreen()
+        screenshot = self.screen.grabWindow(self.widget.winId())
+        if self.ftype == ".png":
+            screenshot.save(self.img, "png")
+        if self.ftype == ".jpg":
+            screenshot.save(self.img, "jpg")
+            
+    def show_beam_sheet(self):
+        if self.beam_sheet_visible == False:
+            self.beam_sheet_widget = QLabel("")
+            pixmap = QPixmap('Beam_Sheet.png')
+            self.beam_sheet_widget.setPixmap(pixmap)
+            self.layout.addWidget(self.beam_sheet_widget,0,0,25,5)
+            self.beam_sheet_visible = True
+        elif self.beam_sheet_visible == True:
+            self.layout.itemAtPosition(0,0).widget().deleteLater()
+            self.beam_sheet_visible = False
         
 # =============================================================================
 # creating beam widgets        
@@ -609,8 +706,7 @@ class main_GUI(QMainWindow):
         
     def remove_support_5(self):
         self.create_sub("remove",12,5,13,14)
-        self.supports[2] = None
-        
+        self.supports[2] = None     
         
     def update_supports(self):
         for i in range(0,len(self.supports)):
@@ -624,7 +720,7 @@ class main_GUI(QMainWindow):
                     exec("self.label"+str(row)+"_"+str(col)+"=QLabel('Reaction_Force:')")
                     exec("self.layout.addWidget(self.label"+str(row)+"_"+str(col)+","+str(row)+","+str(col)+",1,1,Qt.AlignRight)")
                     col = col + 1
-                    exec("self.label"+str(row)+"_"+str(col)+"=QLabel('"+str(round(force,2))+"')")
+                    exec("self.label"+str(row)+"_"+str(col)+"=QLabel('"+str(round(force,2))+" "+main_GUI.force+"')")
                     exec("self.layout.addWidget(self.label"+str(row)+"_"+str(col)+","+str(row)+","+str(col)+",1,1)")
                     col = col + 1
                 if eval("self.support_"+num+".r_f") == False:
@@ -633,10 +729,9 @@ class main_GUI(QMainWindow):
                     exec("self.label"+str(row)+"_"+str(col)+"=QLabel('Reaction_Moment:')")
                     exec("self.layout.addWidget(self.label"+str(row)+"_"+str(col)+","+str(row)+","+str(col)+",1,1,Qt.AlignRight)")
                     col = col + 1
-                    exec("self.label"+str(row)+"_"+str(col)+"=QLabel('"+str(round(moment,2))+"')")
+                    exec("self.label"+str(row)+"_"+str(col)+"=QLabel('"+str(round(moment,2))+" "+main_GUI.force+"-"+main_GUI.distance+"')")
                     exec("self.layout.addWidget(self.label"+str(row)+"_"+str(col)+","+str(row)+","+str(col)+",1,1)")
                     col = col + 1
-        
         
     def create_fixed_support(self):
         row = self.first_empty_row(4,13,5)
@@ -704,8 +799,9 @@ class main_GUI(QMainWindow):
             
 # =============================================================================
 # creating load widgets        
-# ============================================================================
-    
+# =============================================================================
+            
+    #for removing loads
     def remove_load_1(self):
         self.create_sub("remove",14,5,15,14)
         self.loads[0] = None
@@ -773,8 +869,7 @@ class main_GUI(QMainWindow):
                        "_Start_x(self)),float(self.load_"+num+\
                        "_End_x(self)),float(self.load_"+num+\
                        "_Load_start(self)),float(self.load_"+num+\
-                       "_Load_end(self)))")
-            
+                       "_Load_end(self)))")      
 
 class Deflection_Plot(FigureCanvas):
     
@@ -782,7 +877,7 @@ class Deflection_Plot(FigureCanvas):
         self.fig = Figure()
         self.deflection_plot = self.fig.add_subplot(111)
         self.deflection_plot.clear()
-        distance = main_GUI.get_distance(main_GUI)
+        distance = ""
         self.deflection_plot.set_xlabel("x ("+distance+")")
         self.deflection_plot.set_ylabel("y ("+distance+")")
         self.deflection_plot.set_title("Deflection")
@@ -795,7 +890,7 @@ class Deflection_Plot(FigureCanvas):
     def redraw(self, l, y):
         n = 500
         self.deflection_plot.clear()
-        distance = main_GUI.get_distance(main_GUI)
+        distance = main_GUI.distance
         x = sp.symbols('x')
         x_array = np.linspace(0,l,n)
         x_array[n-1] = x_array[n-1] - 10**-7
@@ -808,6 +903,8 @@ class Deflection_Plot(FigureCanvas):
         y_zero = [0.0 for p in x_array]
         self.deflection_plot.plot(x_array,y_array,'r',x_array,y_zero,'k')
         self.deflection_plot.set_title(str(main_GUI.beam_type) +" Deflection (max deflection = "+str(round(deflection,6))+" "+distance+")")
+        self.deflection_plot.set_xlabel("x ("+distance+")")
+        self.deflection_plot.set_ylabel("x ("+distance+")")
         self.draw()
         
 class Shear_Plot(FigureCanvas):
@@ -816,8 +913,8 @@ class Shear_Plot(FigureCanvas):
         self.fig = Figure()
         self.shear_plot = self.fig.add_subplot(111)
         self.shear_plot.clear()
-        distance = main_GUI.get_distance(main_GUI)
-        force = main_GUI.get_force(main_GUI)
+        distance = ""
+        force = ""
         self.shear_plot.set_xlabel("x ("+distance+")")
         self.shear_plot.set_ylabel("y ("+force+")")
         self.shear_plot.set_title("Shear")
@@ -830,8 +927,8 @@ class Shear_Plot(FigureCanvas):
     def redraw(self, l, y):
         n = 500
         self.shear_plot.clear()
-        force = main_GUI.get_force(main_GUI)
-        distance = main_GUI.get_distance(main_GUI)
+        force = main_GUI.force
+        distance = main_GUI.distance
         x = sp.symbols('x')
         x_array = np.linspace(0,l,n)
         x_array[n-1] = x_array[n-1] - 10**-7
@@ -858,8 +955,8 @@ class Bending_Plot(FigureCanvas):
         self.fig = Figure()
         self.bending_plot = self.fig.add_subplot(111)
         self.bending_plot.clear()
-        distance = main_GUI.get_distance(main_GUI)
-        force = main_GUI.get_force(main_GUI)
+        distance = ""
+        force = ""
         self.bending_plot.set_xlabel("x ("+distance+")")
         self.bending_plot.set_ylabel("y ("+force+"-"+distance+")")
         self.bending_plot.set_title("Bending")
@@ -872,8 +969,8 @@ class Bending_Plot(FigureCanvas):
     def redraw(self, l, y):
         n = 500
         self.bending_plot.clear()
-        force = main_GUI.get_force(main_GUI)
-        distance = main_GUI.get_distance(main_GUI)
+        force = main_GUI.get_force(main_GUI,None)
+        distance = main_GUI.get_distance(main_GUI,None)
         x = sp.symbols('x')
         x_array = np.linspace(0,l,n)
         x_array[n-1] = x_array[n-1] - 10**-7
@@ -900,8 +997,8 @@ class Load_Plot(FigureCanvas):
         self.fig = Figure()
         self.load_plot = self.fig.add_subplot(111)
         self.load_plot.clear()
-        distance = main_GUI.get_distance(main_GUI)
-        force = main_GUI.get_force(main_GUI)
+        distance = ""
+        force = ""
         self.load_plot.set_xlabel("x ("+distance+")")
         self.load_plot.set_ylabel("y ("+force+")")
         self.load_plot.set_title("Loading")
@@ -914,8 +1011,8 @@ class Load_Plot(FigureCanvas):
     def redraw(self, l, y):
         n = 500
         self.load_plot.clear()
-        force = main_GUI.get_force(main_GUI)
-        distance = main_GUI.get_distance(main_GUI)
+        force = main_GUI.force
+        distance = main_GUI.distance
         x = sp.symbols('x')
         x_array = np.linspace(0,l,n)
         y_array = [y.subs(x,p) for p in x_array]
