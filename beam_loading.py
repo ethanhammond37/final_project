@@ -654,7 +654,7 @@ class main_GUI(QMainWindow):
     def create_i_beam(self):
         main_GUI.beam_type = "i_beam"
         self.create_sub("beam",1,5,3,14,"I Beam","Length","Height","Width",\
-                        "Top_Bottom_Tickness","Center_Thickness",\
+                        "Top_Bottom_Thickness","Center_Thickness",\
                         "Youngs_Modulus","Specific_Weight")
         
     def update_i_beam(self):
@@ -1040,5 +1040,3 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
     ex = main_GUI()
     app.exec_()
-    
-#FigureCanvas.printJpeg
